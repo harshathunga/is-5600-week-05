@@ -1,49 +1,79 @@
-const fs = require('fs').promises
-const path = require('path')
+const cuid = require("cuid");
+const db = require("./db");
 
-const productsFile = path.join(__dirname, 'data/full-products.json')
+const Product = db.model("Product", {
+  _id: { type: String, default: cuid },
+  description: String,
+  alt_description: String,
+  likes: { type: Number, required: true },
 
-/**
- * List products
- * @param {*} options 
- * @returns 
- */
-async function list(options = {}) {
+  urls: {
+    regular: { type: String, required: true },
+    small: { type: String, required: true },
+    thumb: { type: String, required: true },
+  },
 
-  const { offset = 0, limit = 25, tag } = options;
+  links: {
+    self: { type: String, required: true },
+    html: { type: String, required: true },
+  },
 
-  const data = await fs.readFile(productsFile)
-  return JSON.parse(data)
-    .filter(product => {
-      if (!tag) {
-        return product
-      }
+  user: {
+    id: { type: String, required: true },
+    first_name: { type: String, required: true },
+    last_name: String,
+    portfolio_url: String,
+    username: { type: String, required: true },
+  },
 
-      return product.tags.find(({ title }) => title == tag)
-    })
-    .slice(offset, offset + limit) // Slice the products
+  tags: [
+    {
+      title: { type: String, required: true },
+    },
+  ],
+});
+
+async function create(fields) {
+  const product = await new Product(fields).save();
+  return product;
 }
 
-/**
- * Get a single product
- * @param {string} id
- * @returns {Promise<object>}
- */
+async function list(options = {}) {
+  const { offset = 0, limit = 25, tag } = options;
+
+  const query = tag
+    ? { tags: { $elemMatch: { title: tag } } }
+    : {};
+
+  return await Product.find(query)
+    .sort({ _id: 1 })
+    .skip(offset)
+    .limit(limit);
+}
+
 async function get(id) {
-  const products = JSON.parse(await fs.readFile(productsFile))
+  return await Product.findById(id);
+}
 
-  // Loop through the products and return the product with the matching id
-  for (let i = 0; i < products.length; i++) {
-    if (products[i].id === id) {
-      return products[i]
-    }
-  }
+async function edit(id, changes) {
+  const product = await get(id);
 
-  // If no product is found, return null
-  return null;
+  Object.keys(changes).forEach((key) => {
+    product[key] = changes[key];
+  });
+
+  await product.save();
+  return product;
+}
+
+async function destroy(id) {
+  return await Product.deleteOne({ _id: id });
 }
 
 module.exports = {
+  create,
   list,
-  get
-}
+  get,
+  edit,
+  destroy,
+};
